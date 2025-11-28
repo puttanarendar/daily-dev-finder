@@ -93,14 +93,43 @@ export const JobListings = () => {
     );
   }
 
+  const handleScrapeJobs = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("scrape-jobs");
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Jobs scraped successfully!",
+        description: data?.message || "New jobs have been added",
+      });
+      
+      await fetchJobs();
+    } catch (error: any) {
+      toast({
+        title: "Scraping failed",
+        description: error.message || "Failed to scrape jobs",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Available Jobs</h2>
-        <Button variant="outline" onClick={fetchJobs} size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="default" onClick={handleScrapeJobs} size="sm" disabled={loading}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Scrape New Jobs
+          </Button>
+          <Button variant="outline" onClick={fetchJobs} size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {jobs.length === 0 ? (
