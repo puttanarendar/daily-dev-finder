@@ -16,105 +16,132 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Sample PHP developer jobs from different platforms and locations
-    const sampleJobs = [
-      {
-        job_title: 'Senior PHP Developer',
-        company_name: 'Tech Solutions Pvt Ltd',
-        location: 'Hyderabad',
-        platform: 'naukri',
-        job_description: 'Looking for experienced PHP developer with Laravel expertise. Must have 5+ years experience.',
-        salary_range: '₹8-12 LPA',
-        job_url: 'https://www.naukri.com/job-listings-senior-php-developer',
-        posted_date: new Date().toISOString(),
-      },
-      {
-        job_title: 'PHP Full Stack Developer',
-        company_name: 'Digital Innovations',
-        location: 'Remote',
-        platform: 'linkedin',
-        job_description: 'Remote PHP developer position. Experience with MySQL, JavaScript, and modern PHP frameworks required.',
-        salary_range: '₹6-10 LPA',
-        job_url: 'https://www.linkedin.com/jobs/php-full-stack-developer',
-        posted_date: new Date().toISOString(),
-      },
-      {
-        job_title: 'PHP Backend Developer',
-        company_name: 'Startup Hub India',
-        location: 'Bangalore',
-        platform: 'naukri',
-        job_description: 'Join our growing team as a PHP backend developer. Work on exciting projects with latest technologies.',
-        salary_range: '₹5-8 LPA',
-        job_url: 'https://www.naukri.com/job-listings-php-backend-developer',
-        posted_date: new Date().toISOString(),
-      },
-      {
-        job_title: 'Laravel PHP Developer',
-        company_name: 'CloudTech Systems',
-        location: 'Remote',
-        platform: 'linkedin',
-        job_description: 'Expert Laravel developer needed for enterprise applications. Experience with REST APIs and microservices.',
-        salary_range: '₹10-15 LPA',
-        job_url: 'https://www.linkedin.com/jobs/laravel-php-developer',
-        posted_date: new Date().toISOString(),
-      },
-      {
-        job_title: 'PHP Developer - WordPress',
-        company_name: 'Web Solutions Co',
-        location: 'Hyderabad',
-        platform: 'naukri',
-        job_description: 'WordPress and PHP developer for custom theme and plugin development.',
-        salary_range: '₹4-7 LPA',
-        job_url: 'https://www.naukri.com/job-listings-wordpress-php-developer',
-        posted_date: new Date().toISOString(),
-      },
-      {
-        job_title: 'Junior PHP Developer',
-        company_name: 'Learning Tech Ltd',
-        location: 'Bangalore',
-        platform: 'linkedin',
-        job_description: 'Great opportunity for junior PHP developers to learn and grow. Training provided.',
-        salary_range: '₹3-5 LPA',
-        job_url: 'https://www.linkedin.com/jobs/junior-php-developer',
-        posted_date: new Date().toISOString(),
-      },
-    ];
+    const RAPIDAPI_KEY = Deno.env.get('RAPIDAPI_KEY');
+    
+    if (!RAPIDAPI_KEY) {
+      console.error('RAPIDAPI_KEY not configured');
+      return new Response(
+        JSON.stringify({ success: false, error: 'RAPIDAPI_KEY not configured. Please add your RapidAPI key.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    // Insert jobs into database
+    const jobs: any[] = [];
+
+    // Fetch from LinkedIn Jobs API (via RapidAPI)
+    console.log('Fetching LinkedIn jobs...');
+    try {
+      const linkedinResponse = await fetch(
+        'https://linkedin-jobs-search.p.rapidapi.com/search?keywords=PHP%20Developer&location=India&datePosted=pastWeek&sort=mostRecent',
+        {
+          headers: {
+            'X-RapidAPI-Key': RAPIDAPI_KEY,
+            'X-RapidAPI-Host': 'linkedin-jobs-search.p.rapidapi.com'
+          }
+        }
+      );
+      
+      if (linkedinResponse.ok) {
+        const linkedinData = await linkedinResponse.json();
+        console.log(`Found ${linkedinData.length || 0} LinkedIn jobs`);
+        
+        if (Array.isArray(linkedinData)) {
+          linkedinData.slice(0, 10).forEach((job: any) => {
+            jobs.push({
+              job_title: job.title || 'PHP Developer',
+              company_name: job.company || 'Unknown Company',
+              location: job.location || 'India',
+              platform: 'linkedin',
+              job_url: job.url || `https://linkedin.com/jobs/view/${job.id}`,
+              posted_date: job.postedTime || new Date().toISOString(),
+              salary_range: job.salary || null,
+              job_description: job.description || null
+            });
+          });
+        }
+      } else {
+        const errorText = await linkedinResponse.text();
+        console.error('LinkedIn API error:', linkedinResponse.status, errorText);
+      }
+    } catch (err) {
+      console.error('LinkedIn fetch error:', err);
+    }
+
+    // Fetch from JSearch API (covers Indeed, LinkedIn, Glassdoor etc.)
+    console.log('Fetching jobs from JSearch...');
+    try {
+      const jsearchResponse = await fetch(
+        'https://jsearch.p.rapidapi.com/search?query=PHP%20Developer%20in%20India&page=1&num_pages=1',
+        {
+          headers: {
+            'X-RapidAPI-Key': RAPIDAPI_KEY,
+            'X-RapidAPI-Host': 'jsearch.p.rapidapi.com'
+          }
+        }
+      );
+      
+      if (jsearchResponse.ok) {
+        const jsearchData = await jsearchResponse.json();
+        console.log(`Found ${jsearchData.data?.length || 0} JSearch jobs`);
+        
+        if (jsearchData.data && Array.isArray(jsearchData.data)) {
+          jsearchData.data.slice(0, 10).forEach((job: any) => {
+            jobs.push({
+              job_title: job.job_title || 'PHP Developer',
+              company_name: job.employer_name || 'Unknown Company',
+              location: job.job_city || job.job_country || 'India',
+              platform: 'naukri',
+              job_url: job.job_apply_link || job.job_google_link || '#',
+              posted_date: job.job_posted_at_datetime_utc || new Date().toISOString(),
+              salary_range: job.job_min_salary && job.job_max_salary 
+                ? `${job.job_min_salary} - ${job.job_max_salary} ${job.job_salary_currency || 'INR'}`
+                : null,
+              job_description: job.job_description || null
+            });
+          });
+        }
+      } else {
+        const errorText = await jsearchResponse.text();
+        console.error('JSearch API error:', jsearchResponse.status, errorText);
+      }
+    } catch (err) {
+      console.error('JSearch fetch error:', err);
+    }
+
+    if (jobs.length === 0) {
+      console.log('No jobs found from APIs');
+      return new Response(
+        JSON.stringify({ success: false, message: 'No jobs found from APIs', jobsAdded: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Inserting ${jobs.length} jobs into database...`);
     const { data, error } = await supabaseClient
       .from('job_listings')
-      .insert(sampleJobs)
+      .upsert(jobs, { onConflict: 'job_url', ignoreDuplicates: true })
       .select();
 
     if (error) {
-      console.error('Error inserting jobs:', error);
+      console.error('Database insert error:', error);
       throw error;
     }
 
-    console.log(`Successfully scraped and added ${data?.length || 0} jobs`);
-
+    console.log(`Successfully inserted ${data?.length || 0} jobs`);
     return new Response(
-      JSON.stringify({
-        success: true,
-        jobsAdded: data?.length || 0,
+      JSON.stringify({ 
+        success: true, 
         message: `Successfully scraped ${data?.length || 0} PHP developer jobs`,
+        jobsAdded: data?.length || 0 
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (error) {
-    console.error('Error in scrape-jobs function:', error);
+    console.error('Scrape jobs error:', error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
