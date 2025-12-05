@@ -1,1 +1,7 @@
 project_id = "rollifroelpcklkkafsr"
+
+[functions.scrape-jobs]
+verify_jwt = false
+
+[functions.apply-to-job]
+verify_jwt = false
